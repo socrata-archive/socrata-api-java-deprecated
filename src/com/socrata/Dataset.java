@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ResourceBundle;
 import java.util.logging.Level;
 import java.util.regex.Pattern;
 import org.apache.http.client.methods.HttpDelete;
@@ -32,7 +33,21 @@ public class Dataset extends ApiBase {
     private static final Integer  DEFAULT_COLUMN_WIDTH        = 100;
     private static final String   DEFAULT_COLUMN_TYPE_STRING  = "text";
     private static final DataType DEFAULT_COLUMN_TYPE         = DataType.TEXT;
-    
+
+    /**
+     * Default constructor
+     */
+    public Dataset() {
+        super();
+    }
+    /**
+     * Copy constructor
+     * @param properties properties from an existing Socrata object
+     */
+    public Dataset(ResourceBundle properties) {
+        super(properties);
+    }
+
     /**
      * Creates a new dataset on the server
      * @param title  the title of the dataset

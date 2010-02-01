@@ -33,6 +33,20 @@ public abstract class ApiBase {
      */
     public ApiBase() {
         loadProperties();
+        finishConstruction();
+    }
+
+    /**
+     * Copy settings from an existing object
+     * @param properties Specifies credentials and hostnames
+     */
+    public ApiBase(ResourceBundle properties) {
+        this.properties = properties;
+        this.httpClient = new DefaultHttpClient();
+        finishConstruction();
+    }
+
+    private void finishConstruction() {
         // Store these because we need them for some specialized calls
         this.username = properties.getString("username");
         this.password = properties.getString("password");
