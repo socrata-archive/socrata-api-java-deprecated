@@ -39,7 +39,7 @@ public class Dataset extends ApiBase {
      * @param description  the description of the dataset
      * @param tags  tags associated with the dataset
      */
-    public void create(String title, String description, String[] tags) {
+    public boolean create(String title, String description, String[] tags) {
         JSONObject data = new JSONObject();
 
         try {
@@ -52,7 +52,7 @@ public class Dataset extends ApiBase {
         }
         catch (JSONException ex) {
             log(Level.SEVERE, "Caught JSON exception in Dataset.create()", ex);
-            return;
+            return false;
         }
         
         
@@ -62,18 +62,18 @@ public class Dataset extends ApiBase {
         }
         catch (UnsupportedEncodingException ex) {
             log(Level.SEVERE, "Could not encode Dataset.create() request data.", ex);
-            return;
+            return false;
         }
         
         // If we've made it this far, the Java gods are smiling down on us
         JsonPayload response = performRequest(request);
         if ( isErroneous(response) ) {
             log(Level.SEVERE, "Error in dataset creation, see logs" , null);
-            return;
+            return false;
         }
         if ( response.getObject() == null ) {
             log(Level.SEVERE, "Received empty response from server on Dataset.create()", null);
-            return;
+            return false;
         }
         try {
             this.id = response.getObject().getString("id");
@@ -82,9 +82,10 @@ public class Dataset extends ApiBase {
             log(Level.SEVERE, 
                     "Could not extract dataset id from JSON response:\n" +
                     response.toString(), ex);
-            return;
+            return false;
         }
         log(Level.INFO, "Successfully created dataset with id " + this.id, null);
+        return true;
     }
 
     /**
@@ -92,16 +93,16 @@ public class Dataset extends ApiBase {
      * @param title  the title of the dataset
      * @param description  the description of the dataset
      */
-    public void create(String title, String description) {
-        create(title, description, null);
+    public boolean create(String title, String description) {
+        return create(title, description, null);
     }
 
     /**
      * Convenience create method
      * @param title  the title of the dataset
      */
-    public void create(String title) {
-        create(title, "", null);
+    public boolean create(String title) {
+        return create(title, "", null);
     }
 
     /**
@@ -349,6 +350,14 @@ public class Dataset extends ApiBase {
             log(Level.SEVERE, "Could not serialize attribution data to JSON", ex);
         }
 
+    }
+
+    /**
+     * Gets a short link to this dataset
+     * @return a rooted url for this dataset, in short form
+     */
+    public String shortUrl() {
+        return properties.getString("web_host") + "/d/" + id();
     }
 
     /**
