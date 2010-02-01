@@ -1,0 +1,383 @@
+package com.socrata;
+
+
+import java.io.File;
+import java.io.UnsupportedEncodingException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.regex.Pattern;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.content.FileBody;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+/**
+ * A Socrata dataset and associated rows/columns/metadata
+ *
+ * @author aiden.scandella@socrata.com
+ */
+public class Dataset extends ApiBase {
+    private String  id;
+    private static final Pattern  UID_PATTERN = Pattern.compile("[a-z0-9]{4}-[a-z0-9]{4}");
+    private static final Integer  DEFAULT_COLUMN_WIDTH        = 100;
+    private static final String   DEFAULT_COLUMN_TYPE_STRING  = "text";
+    private static final DataType DEFAULT_COLUMN_TYPE         = DataType.TEXT;
+    
+    /**
+     * Creates a new dataset on the server
+     * @param title  the title of the dataset
+     * @param description  the description of the dataset
+     * @param tags  tags associated with the dataset
+     */
+    public void create(String title, String description, String[] tags) {
+        JSONObject data = new JSONObject();
+
+        try {
+            data.put("name", title);
+            data.put("description", description);
+
+            if ( tags != null && tags.length > 0 ) {
+                data.put("tags", tags.toString());
+            }
+        }
+        catch (JSONException ex) {
+            log(Level.SEVERE, "Caught JSON exception in Dataset.create()", ex);
+            return;
+        }
+        
+        
+        HttpPost request = new HttpPost(httpBase() + "/views.json");
+        try {
+            request.setEntity(new StringEntity(data.toString()));
+        }
+        catch (UnsupportedEncodingException ex) {
+            log(Level.SEVERE, "Could not encode Dataset.create() request data.", ex);
+            return;
+        }
+        
+        // If we've made it this far, the Java gods are smiling down on us
+        JsonPayload response = performRequest(request);
+        if ( isErroneous(response) ) {
+            log(Level.SEVERE, "Error in dataset creation, see logs" , null);
+            return;
+        }
+        if ( response.getObject() == null ) {
+            log(Level.SEVERE, "Received empty response from server on Dataset.create()", null);
+            return;
+        }
+        try {
+            this.id = response.getObject().getString("id");
+        }
+        catch(JSONException ex) {
+            log(Level.SEVERE, 
+                    "Could not extract dataset id from JSON response:\n" +
+                    response.toString(), ex);
+            return;
+        }
+        log(Level.INFO, "Successfully created dataset with id " + this.id, null);
+    }
+
+    /**
+     * Convenience create method
+     * @param title  the title of the dataset
+     * @param description  the description of the dataset
+     */
+    public void create(String title, String description) {
+        create(title, description, null);
+    }
+
+    /**
+     * Convenience create method
+     * @param title  the title of the dataset
+     */
+    public void create(String title) {
+        create(title, "", null);
+    }
+
+    /**
+     * Adds a row to the dataset
+     * @param Key/value pairs of column/data
+     */
+    public boolean addRow(Map row) {
+        if ( ! attached() ) {
+            return false;
+        }
+        JSONObject rowJson = new JSONObject(row);
+        HttpPost request = new HttpPost(httpBase() + "/views/" +
+                id() + "/rows.json");
+        try {
+            request.setEntity(new StringEntity(rowJson.toString()));
+        }
+        catch (UnsupportedEncodingException ex) {
+            log(Level.SEVERE, "Could not encode row data in Dataset.addRow().", ex);
+            return false;
+        }
+        JsonPayload response = performRequest(request);
+
+        return !isErroneous(response);
+    }
+
+    /**
+     * Creates a new column in the dataset
+     * @param name  the unique name of the column
+     * @param description  an optional description for the column
+     * @param type  the data type; e.g. text, number, url
+     * @param width  how many pixels wide the column should display
+     * @param hidden  whether or not the column is hidden
+     * @return success or failure
+     */
+    public boolean addColumn(String name, String description, 
+            DataType type, Integer width, Boolean hidden) {
+        if ( ! attached() ) {
+            return false;
+        }
+
+        log(Level.FINEST, "Creating column '" + name + "' of type '" +
+                   type + "'");
+
+        JSONObject columnJson = new JSONObject();
+        try {
+            columnJson.put("name", name);
+            columnJson.put("description", description);
+            columnJson.put("dataTypeName", getDataTypeName(type));
+            columnJson.put("hidden", hidden);
+            columnJson.put("width", width);
+            if ( type == DataType.RICHTEXT ) {
+                Map<String, String> map = new HashMap<String, String>();
+                map.put("formatting_option", "rich");
+                columnJson.put("format", map);
+            }
+        } catch (JSONException ex) {
+            log(Level.SEVERE, "Could not create column JSON data for addColumn()", ex);
+        }
+
+        HttpPost request = new HttpPost(httpBase() + "/views/" + id() +
+                "/columns.json");
+
+        try {
+            request.setEntity(new StringEntity(columnJson.toString()));
+        } 
+        catch (UnsupportedEncodingException ex) {
+            log(Level.SEVERE, "Could not encode column data in Dataset.addColumn().", ex);
+            return false;
+        }
+
+        return !isErroneous(performRequest(request));
+    }
+
+
+    public boolean addColumn(String name, String description, DataType type,
+            Integer width) {
+        return addColumn(name, description, type, width, false);
+    }
+
+    public boolean addColumn(String name, String description, DataType type) {
+        return addColumn(name, description, type, DEFAULT_COLUMN_WIDTH, false);
+    }
+
+    public boolean addColumn(String name, String description) {
+        return addColumn(name, description, DEFAULT_COLUMN_TYPE,
+                DEFAULT_COLUMN_WIDTH, false);
+    }
+
+    public boolean addColumn(String name) {
+        return addColumn(name, "", DEFAULT_COLUMN_TYPE,
+                DEFAULT_COLUMN_WIDTH, false);
+    }
+
+    /**
+     * Uploads a file to the api
+     * @param file   the file to upload
+     * @return   the ID used to put in a cell to reference this file
+     */
+    public String uploadFile(File file) {
+        if ( !attached() ) {
+            return null;
+        }
+
+        HttpPost poster = new HttpPost(httpBase() + "/views/" + id() + "/files.txt");
+        MultipartEntity reqEntity = new MultipartEntity(HttpMultipartMode.STRICT);
+
+        FileBody fileBody = new FileBody(file);
+        reqEntity.addPart("file", fileBody);
+
+        poster.setEntity(reqEntity);
+        JsonPayload response = performRequest(poster);
+
+        if ( isErroneous(response) ) {
+            log(Level.SEVERE, "Failed to upload file.", null);
+            return null;
+        }
+        else {
+            JSONObject jResponse = response.getObject();
+            if ( jResponse == null ) {
+                log(Level.SEVERE, "Received a null response after file upload.", null);
+                return null;
+            }
+            else {
+                try {
+                    return jResponse.getString("file");
+                }
+                catch (JSONException ex) {
+                    log(Level.SEVERE, "Could not deserialize JSON response.", ex);            
+                    return null;
+                }
+            }
+        }
+    }
+
+
+    public void attach(String idString) {
+        if ( isValidId(idString) ) {
+            this.id = idString;
+        }
+        else {
+            log(Level.WARNING, "Could not use ID '" + idString +
+                    "': invalid UID format", null);
+        }
+    }
+
+    /**
+     * Permanently deletes this dataset
+     * @return true on success
+     */
+    public boolean delete() {
+        if ( !attached() ) {
+            return false;
+        }
+        HttpDelete request = new HttpDelete(httpBase()  +
+                "/views.json/?id=" + id() + "&method=delete");
+        
+        // This call should return nothing
+        return !isErroneous(performRequest(request));
+    }
+
+    /**
+     * Marks the dataset as public or private
+     * @param isPublic whether or not other users can view the dataset
+     */
+    public boolean setPublic(Boolean isPublic) {
+        String paramString = isPublic ? "public" : "private";
+
+        HttpGet request = new HttpGet(httpBase() +
+                "/views/" + id() + "?method=setPermission&value=" + paramString);
+
+        return !isErroneous(performRequest(request));
+    }
+
+    /**
+     * @return whether or not the Dataset object is currently associated
+     */
+    public boolean attached() {
+        return id() != null && !id().isEmpty() && isValidId(id());
+    }
+
+    /**
+     * Gets the metadata associated with the dataset
+     * @return the metadata
+     */
+    public JSONObject metadata() {
+        if ( ! attached() ) {
+            return null;
+        }
+        HttpGet request = new HttpGet(httpBase() + "/views/" + id() +
+                ".json");
+        JsonPayload response = performRequest(request);
+        return response.getObject();
+    }
+
+    /**
+     * Fetches the dataset's columns
+     * @return an array of columns, or null on failure
+     */
+    public JSONArray columns() {
+        if ( !attached() ) {
+            return null;
+        }
+
+        HttpGet request = new HttpGet(httpBase() + "/views/" +
+                id() + "/columns.json");
+
+        JsonPayload response = performRequest(request);
+        
+        if ( !isErroneous(response) ) {
+            return response.getArray();
+        }
+        return null;
+    }
+
+     /**
+     * Fetches the dataset's rows
+     * @return an array of rows, or null on failure
+     */
+    public JSONArray rows() {
+        if ( ! attached() ) {
+            return null;
+        }
+
+        HttpGet request = new HttpGet(httpBase() + "/views/" +
+                id() + "/rows.json");
+
+        JsonPayload response = performRequest(request);
+
+        return response.getArray();
+    }
+
+    /**
+     * Whether the given string matches the Socrata uid pattern
+     * @param idString the UID to test
+     * @return whether or not the UID matches the regexp
+     */
+    private static boolean isValidId(String idString) {
+        return UID_PATTERN.matcher(idString).matches();
+    }
+
+    /**
+     * Gets the four-four id of the dataset
+     * @return the four-four id of the current dataset
+     */
+    public String id() {
+        return this.id;
+    }
+
+    /**
+     * Converts a DataType enum into api string format
+     * @param d the DataType to convert
+     * @return a textual representation of the datatype
+     */
+    private String getDataTypeName(DataType d) {
+        switch(d) {
+            case TEXT:      return "text";
+            case RICHTEXT:  return "text";
+            case NUMBER:    return "number";
+            case MONEY:     return "money";
+            case PERCENT:   return "percent";
+            case DATE:      return "date";
+            case PHONE:     return "phone";
+            case EMAIL:     return "email";
+            case URL:       return "url";
+            case CHECKBOX:  return "checkbox";
+            case STAR:      return "stars";
+            case FLAG:      return "flag";
+            case DOCUMENT:  return "document";
+            case PHOTO:     return "photo";
+            
+            default:        return DEFAULT_COLUMN_TYPE_STRING;
+        }
+    }
+
+    // Which types of columns are supported
+    public enum DataType {
+        TEXT, RICHTEXT, NUMBER, MONEY, PERCENT, DATE, PHONE, EMAIL, URL,
+        CHECKBOX, STAR, FLAG, DOCUMENT, PHOTO
+    }
+}
