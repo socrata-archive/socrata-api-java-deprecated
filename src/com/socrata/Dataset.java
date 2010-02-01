@@ -19,6 +19,7 @@ import org.apache.http.entity.mime.content.FileBody;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONStringer;
 
 /**
  * A Socrata dataset and associated rows/columns/metadata
@@ -205,6 +206,8 @@ public class Dataset extends ApiBase {
         }
 
         HttpPost poster = new HttpPost(httpBase() + "/views/" + id() + "/files.txt");
+
+        // Makes sure the Content-type is set, otherwise the server chokes
         MultipartEntity reqEntity = new MultipartEntity(HttpMultipartMode.STRICT);
 
         FileBody fileBody = new FileBody(file);
@@ -225,6 +228,7 @@ public class Dataset extends ApiBase {
             }
             else {
                 try {
+                    // The good stuff (i.e. the ID needed to embed this file in a cell)
                     return jResponse.getString("file");
                 }
                 catch (JSONException ex) {
@@ -320,7 +324,7 @@ public class Dataset extends ApiBase {
      * @return an array of rows, or null on failure
      */
     public JSONArray rows() {
-        if ( ! attached() ) {
+        if ( !attached() ) {
             return null;
         }
 
@@ -330,6 +334,42 @@ public class Dataset extends ApiBase {
         JsonPayload response = performRequest(request);
 
         return response.getArray();
+    }
+
+    public void setAttribution(String attribution, String url) {
+        try {
+            String json = new JSONStringer()
+                .object()
+                    .key( "attribution" ).value( attribution )
+                    .key( "attributionLink" ).value( url )
+                 .endObject().toString();
+            putRequest(json);    
+        }
+        catch (JSONException ex) {
+            log(Level.SEVERE, "Could not serialize attribution data to JSON", ex);
+        }
+
+    }
+
+    /**
+     * Performs a generic put request, i.e. for metadata/attribution
+     * @param body
+     */
+    private void putRequest(String body) {
+        if ( !attached() ) {
+            return;
+        }
+        HttpPut request = new HttpPut(httpBase() + "/views/" + id());
+        try {
+            request.setEntity( new StringEntity(body) );
+        }
+        catch ( UnsupportedEncodingException ex ) {
+            log(Level.WARNING, "Could not encode PUT into HTTP envelope", ex);
+        }
+        JsonPayload response = performRequest(request);
+        if ( isErroneous(response) ) {
+            log(Level.WARNING, "PUT request failed");
+        }
     }
 
     /**
