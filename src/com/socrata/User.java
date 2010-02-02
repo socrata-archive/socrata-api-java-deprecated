@@ -17,13 +17,20 @@ import java.util.logging.Level;
 public class User extends ApiBase {
     private String username;
 
-    
+    /**
+     * Default constructor. Associates a username with their Socrata profile
+     * @param username The name or UID of the user
+     */
     public User(String username) {
         super();
 
         this.username = username;
     }
 
+    /**
+     * Gets all the datasets belonging to a user
+     * @return A list of Datasets belonging to this user
+     */
     public List<Dataset> datasets() {
         HttpGet request = new HttpGet(httpBase() + "/users/" + username + "/views.json");
         JsonPayload response = performRequest(request);
@@ -34,6 +41,7 @@ public class User extends ApiBase {
 
         JSONArray jsonSets = response.getArray();
         List<Dataset> sets = new LinkedList<Dataset>();
+        
         for( int i = 0; i < jsonSets.length(); i++ ) {
             Dataset set = new Dataset(this.properties);
             try {
@@ -44,7 +52,6 @@ public class User extends ApiBase {
             }
             catch ( JSONException ex) {
                 log(Level.SEVERE, "Could not grab JSON object out of array at index: " + i, null);
-                continue;
             }
         }
 
