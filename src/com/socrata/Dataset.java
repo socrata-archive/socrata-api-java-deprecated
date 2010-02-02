@@ -11,7 +11,6 @@ import java.util.regex.Pattern;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
-
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.HttpMultipartMode;
@@ -352,6 +351,11 @@ public class Dataset extends ApiBase {
         return response.getArray();
     }
 
+    /**
+     * Sets dataset attribution metadata
+     * @param attribution the name of the attribution
+     * @param url a link to the original source
+     */
     public void setAttribution(String attribution, String url) {
         try {
             String json = new JSONStringer()
@@ -362,9 +366,26 @@ public class Dataset extends ApiBase {
             putRequest(json);    
         }
         catch (JSONException ex) {
-            log(Level.SEVERE, "Could not serialize attribution data to JSON", ex);
+            log(Level.WARNING, "Could not serialize attribution data to JSON", ex);
         }
 
+    }
+
+    /**
+     * Sets the dataset's description
+     * @param description a useful description for the dataset
+     */
+    public void setDescription(String description) {
+        try {
+            String json = new JSONStringer()
+                .object()
+                    .key( "description" ).value( description )
+                 .endObject().toString();
+            putRequest(json);
+        }
+        catch (JSONException ex) {
+            log(Level.WARNING, "Could not serialize description data to JSON", ex);
+        }
     }
 
     /**

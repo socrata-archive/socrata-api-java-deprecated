@@ -63,9 +63,9 @@ public class JsonPayload {
     }
 
     private void extractJson(Reader reader) {
-        // JSONTokener tokener = new JSONTokener(reader);
         String jsonString = readerToString(reader);
         JSONTokener tokener = new JSONTokener(jsonString);
+        
         if ( jsonString.length() > 0 && jsonString.charAt(0) == '[') {
             try {
                 jsonArray = new JSONArray(tokener);
