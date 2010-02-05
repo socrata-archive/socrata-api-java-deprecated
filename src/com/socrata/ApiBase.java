@@ -6,12 +6,17 @@ import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
-import java.util.ResourceBundle;
+import java.io.UnsupportedEncodingException;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -24,6 +29,8 @@ public abstract class ApiBase {
     protected DefaultHttpClient   httpClient;
     protected ResourceBundle      properties;
     protected String              username, password;
+
+    protected List<BatchRequest>  batchQueue;
     
 
     /**
@@ -51,6 +58,8 @@ public abstract class ApiBase {
         this.username = properties.getString("username");
         this.password = properties.getString("password");
 
+        batchQueue = new ArrayList<BatchRequest>();
+
         setupBasicAuthentication();
     }
 
@@ -71,8 +80,51 @@ public abstract class ApiBase {
     }
 
     /**
+     * Empty out the batchQueue, sending stored data back to Socrata servers
+     * @return success or failure
+     */
+    public boolean sendBatchRequest() {
+        if ( batchQueue == null || batchQueue.size() == 0 ) {
+            log(Level.WARNING, "No batch requests in queue, ignoring call to sendBatchRequest" , null);
+            return false;
+        }
+        Collection batches = new ArrayList<Map>();
+        for( BatchRequest b : batchQueue ) {
+            batches.add(b.data());
+        }
+        
+        JSONObject bodyObject = new JSONObject();
+        try {
+            bodyObject.put("requests", batches);
+        }
+        catch ( JSONException ex ) {
+            log(Level.SEVERE, "Could not convert array of batch requests to JSON", ex);
+            return false;
+        }
+        
+        HttpPost request = new HttpPost(httpBase() + "/batches");
+        try {
+            request.setEntity(new StringEntity(bodyObject.toString()));
+        }
+        catch ( UnsupportedEncodingException ex ) {
+            log(Level.SEVERE, "Could not encode JSON data into HTTP entity", ex);
+            return false;
+        }
+
+        JsonPayload response = performRequest(request);
+        if ( !isErroneous(response) ) {
+            log(Level.INFO, "Completed batch request, clearing out queue of " +
+                    batchQueue.size() + " entries.");
+            batchQueue.clear();
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Performs a generic request against Socrata API servers
-     * @param Apache HttpRequest object (e.g. HttpPost, HttpGet)
+     * @param request Apache HttpRequest object (e.g. HttpPost, HttpGet)
      * @return JSON array representation of the response
      */
     protected JsonPayload performRequest(HttpRequestBase request) {
@@ -89,20 +141,10 @@ public abstract class ApiBase {
                 return null;
             }
             
-            // entity = response.getEntity();
-            // InputStream stream = entity.getContent();
-            
-            // InputStreamReader responseReader = new InputStreamReader(stream);
 
             JsonPayload payload = new JsonPayload(response);
 
-            // JSONObject jsonResponse = new JSONObject(new JSONTokener(responseReader));
-            
-            // System.err.print(jsonResponse.toString(4));
-
-            // stream.close();
             return payload;
-            // return jsonResponse;
         }
         catch (Exception ex) {
             log(Level.SEVERE, "Error caught trying to perform HTTP request", ex);
