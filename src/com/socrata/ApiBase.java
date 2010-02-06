@@ -1,17 +1,42 @@
 package com.socrata;
 
+/*
+
+Copyright (c) 2010 Socrata.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+ */
+
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScheme;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.AuthCache;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.BasicAuthCache;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.json.JSONArray;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.protocol.BasicHttpContext;
+import org.apache.http.protocol.HttpContext;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -26,11 +51,13 @@ import java.util.logging.Logger;
  * @author aiden.scandella@socrata.com
  */
 public abstract class ApiBase {
-    protected DefaultHttpClient   httpClient;
-    protected ResourceBundle      properties;
+    protected DefaultHttpClient httpClient;
+    protected HttpContext httpContext;
+    protected HttpHost httpHost;
+    protected ResourceBundle properties;
     protected String              username, password;
 
-    protected List<BatchRequest>  batchQueue;
+    protected List<BatchRequest> batchQueue;
     
 
     /**
@@ -58,9 +85,17 @@ public abstract class ApiBase {
         this.username = properties.getString("username");
         this.password = properties.getString("password");
 
+
         batchQueue = new ArrayList<BatchRequest>();
 
         setupBasicAuthentication();
+
+        httpHost = new HttpHost(properties.getString("hostname"),
+                Integer.valueOf(properties.getString("hostport")));
+
+        httpContext = new BasicHttpContext();
+
+        
     }
 
     /**
@@ -105,6 +140,7 @@ public abstract class ApiBase {
         HttpPost request = new HttpPost(httpBase() + "/batches");
         try {
             request.setEntity(new StringEntity(bodyObject.toString()));
+            log(Level.INFO, bodyObject.toString());
         }
         catch ( UnsupportedEncodingException ex ) {
             log(Level.SEVERE, "Could not encode JSON data into HTTP entity", ex);
@@ -131,7 +167,7 @@ public abstract class ApiBase {
         HttpResponse response;
          HttpEntity entity;
         try {
-            response = httpClient.execute(request);
+            response = httpClient.execute(httpHost, request, httpContext);
             
             if( response.getStatusLine().getStatusCode() != 200 ) {
                 log(java.util.logging.Level.SEVERE, "Got status " +
@@ -168,6 +204,14 @@ public abstract class ApiBase {
         CredentialsProvider credProvider = new BasicCredentialsProvider();
 
         credProvider.setCredentials(AuthScope.ANY, defaultcreds);
+
+        AuthCache authCache = new BasicAuthCache();
+        BasicScheme basicAuth = new BasicScheme();
+        
+        httpContext = new BasicHttpContext();
+        httpContext.setAttribute(ClientContext.AUTH_CACHE, basicAuth);
+
+
         httpClient.setCredentialsProvider(credProvider);
     }
 
@@ -177,7 +221,8 @@ public abstract class ApiBase {
      * @return the base URL for http requests
      */
     public String httpBase() {
-        return properties.getString("api_host");
+        return "http://" + properties.getString("hostname") +
+                ":" + properties.getString("hostport");
     }
 
     /**
@@ -202,7 +247,7 @@ public abstract class ApiBase {
     /**
      * Inspects the JSON payload returned from the API server for error messages
      * @param response the response
-     * @return true if resoponse contains errors
+     * @return true if response contains errors
      */
     protected boolean isErroneous(JsonPayload response) {
         if ( response == null ) {

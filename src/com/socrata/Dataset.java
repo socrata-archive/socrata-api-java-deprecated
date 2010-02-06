@@ -1,5 +1,22 @@
 package com.socrata;
 
+/*
+
+Copyright (c) 2010 Socrata.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+ */
 
 import java.io.File;
 import java.io.UnsupportedEncodingException;
@@ -28,7 +45,7 @@ import org.json.JSONStringer;
  */
 public class Dataset extends ApiBase {
     private String  id;
-    private static final Pattern  UID_PATTERN = Pattern.compile("[a-z0-9]{4}-[a-z0-9]{4}");
+    private static final Pattern  UID_PATTERN                 = Pattern.compile("[a-z0-9]{4}-[a-z0-9]{4}");
     private static final Integer  DEFAULT_COLUMN_WIDTH        = 100;
     private static final String   DEFAULT_COLUMN_TYPE_STRING  = "text";
     private static final DataType DEFAULT_COLUMN_TYPE         = DataType.TEXT;
@@ -68,7 +85,6 @@ public class Dataset extends ApiBase {
             log(Level.SEVERE, "Caught JSON exception in Dataset.create()", ex);
             return false;
         }
-        
         
         HttpPost request = new HttpPost(httpBase() + "/views.json");
         try {
@@ -121,7 +137,8 @@ public class Dataset extends ApiBase {
 
     /**
      * Adds a row to the dataset
-     * @param Key/value pairs of column/data
+     * @param row Key/value pairs of column/data
+     * @return success or failure
      */
     public boolean addRow(Map row) {
         if ( ! attached() ) {
@@ -140,6 +157,18 @@ public class Dataset extends ApiBase {
         JsonPayload response = performRequest(request);
 
         return !isErroneous(response);
+    }
+
+    /**
+     * Creates an "add row" request and adds it to the batch queue
+     * @param row Key/value pairs of column data
+     */
+    public void delayAddRow(Map row) {
+        JSONObject rowJson = new JSONObject(row);
+
+        BatchRequest request = new BatchRequest("POST",
+                "/views/" + id() + "/rows.json", rowJson.toString());
+        batchQueue.add(request);
     }
 
     /**
@@ -247,14 +276,17 @@ public class Dataset extends ApiBase {
                     return jResponse.getString("file");
                 }
                 catch (JSONException ex) {
-                    log(Level.SEVERE, "Could not deserialize JSON response.", ex);            
+                    log(Level.SEVERE, "Could not deserialize JSON response in file upload.", ex);            
                     return null;
                 }
             }
         }
     }
 
-
+    /**
+     * Given an exsting four-four Socrata UID, use this existing set
+     * @param idString valid Socrata UID
+     */
     public void attach(String idString) {
         if ( isValidId(idString) ) {
             this.id = idString;
@@ -398,7 +430,7 @@ public class Dataset extends ApiBase {
 
     /**
      * Performs a generic put request, i.e. for metadata/attribution
-     * @param body
+     * @param body a JSON string of data for the http put request
      */
     private void putRequest(String body) {
         if ( !attached() ) {
