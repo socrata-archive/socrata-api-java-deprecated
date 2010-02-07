@@ -136,6 +136,63 @@ public class Dataset extends ApiBase {
     }
 
     /**
+     * Import a new file to create a dataset
+     * @param file the file (XLS, XLSX, or CSV) to import
+     * @return success or failure
+     */
+    public boolean importFile(File file) {
+        JSONObject response = multipartUpload("/imports", file, "file");
+
+        if ( response == null ) {
+            log(Level.SEVERE, "Received a null response after file import.", null);
+            return false;
+        }
+        else {
+            try {
+                this.id =  response.getString("id");
+                log(Level.INFO, "Successfully imported file '"
+                        + response.getString("name") + "' (" + id() + ")");
+            }
+            catch (JSONException ex) {
+                log(Level.SEVERE, "Could not deserialize JSON response in file import.", ex);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Refresh (replace) the current dataset with a file
+     * @param file the data file to use
+     * @return success or failure
+     */
+    public boolean refresh(File file) {
+        return multipartAppendOrRefresh(file, "replace");
+    }
+
+    /**
+     * Append the current dataset with a file
+     * @param file the data file to use
+     * @return success or failure
+     */
+    public boolean append(File file) {
+        return multipartAppendOrRefresh(file, "append");
+    }
+
+    private boolean multipartAppendOrRefresh(File file, String method) {
+        if ( ! attached() ) {
+            return false;
+        }
+        JSONObject response = multipartUpload("/views/" + id() + "/rows?method=" + method, file, "file");
+
+        if ( response == null ) {
+            log(Level.SEVERE, "Received a null response after file append or refresh.", null);
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Adds a row to the dataset
      * @param row Key/value pairs of column/data
      * @return success or failure
@@ -249,13 +306,32 @@ public class Dataset extends ApiBase {
             return null;
         }
 
-        HttpPost poster = new HttpPost(httpBase() + "/views/" + id() + "/files.txt");
+        JSONObject response = multipartUpload("/views/" + id() + "/files.txt", file, "file");
+        
+        if ( response == null ) {
+            log(Level.SEVERE, "Received a null response after file upload.", null);
+            return null;
+        }
+        else {
+            try {
+                // The good stuff (i.e. the ID needed to embed this file in a cell)
+                return response.getString("file");
+            }
+            catch (JSONException ex) {
+                log(Level.SEVERE, "Could not deserialize JSON response in file upload.", ex);
+                return null;
+            }
+        }
+    }
+
+    private JSONObject multipartUpload(String url, File file, String field) {
+        HttpPost poster = new HttpPost(httpBase() + url);
 
         // Makes sure the Content-type is set, otherwise the server chokes
         MultipartEntity reqEntity = new MultipartEntity(HttpMultipartMode.STRICT);
 
         FileBody fileBody = new FileBody(file);
-        reqEntity.addPart("file", fileBody);
+        reqEntity.addPart(field, fileBody);
 
         poster.setEntity(reqEntity);
         JsonPayload response = performRequest(poster);
@@ -264,23 +340,7 @@ public class Dataset extends ApiBase {
             log(Level.SEVERE, "Failed to upload file.", null);
             return null;
         }
-        else {
-            JSONObject jResponse = response.getObject();
-            if ( jResponse == null ) {
-                log(Level.SEVERE, "Received a null response after file upload.", null);
-                return null;
-            }
-            else {
-                try {
-                    // The good stuff (i.e. the ID needed to embed this file in a cell)
-                    return jResponse.getString("file");
-                }
-                catch (JSONException ex) {
-                    log(Level.SEVERE, "Could not deserialize JSON response in file upload.", ex);            
-                    return null;
-                }
-            }
-        }
+        return response.getObject();
     }
 
     /**

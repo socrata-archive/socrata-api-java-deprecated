@@ -21,7 +21,6 @@ limitations under the License.
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
-import org.apache.http.auth.AuthScheme;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -62,8 +61,6 @@ public abstract class ApiBase {
 
     /**
      * Default class constructor.
-     * 
-     * @return A new Socrata API object
      */
     public ApiBase() {
         loadProperties();
@@ -94,8 +91,6 @@ public abstract class ApiBase {
                 Integer.valueOf(properties.getString("hostport")));
 
         httpContext = new BasicHttpContext();
-
-        
     }
 
     /**
