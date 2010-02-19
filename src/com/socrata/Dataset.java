@@ -85,11 +85,11 @@ public class Dataset extends ApiBase {
             log(Level.SEVERE, "Caught JSON exception in Dataset.create()", ex);
             return false;
         }
-        
         HttpPost request = new HttpPost(httpBase() + "/views.json");
         try {
             request.setEntity(new StringEntity(data.toString()));
         }
+
         catch (UnsupportedEncodingException ex) {
             log(Level.SEVERE, "Could not encode Dataset.create() request data.", ex);
             return false;
@@ -377,7 +377,7 @@ public class Dataset extends ApiBase {
      * @param isPublic whether or not other users can view the dataset
      */
     public boolean setPublic(Boolean isPublic) {
-        String paramString = isPublic ? "public" : "private";
+        String paramString = isPublic ? "public.read" : "private";
 
         HttpGet request = new HttpGet(httpBase() +
                 "/views/" + id() + "?method=setPermission&value=" + paramString);
