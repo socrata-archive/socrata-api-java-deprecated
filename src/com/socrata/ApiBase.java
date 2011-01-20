@@ -46,7 +46,7 @@ import java.util.logging.Logger;
 
 /**
  * Base class under which all Socrata classes inherit.
- * 
+ *
  * @author aiden.scandella@socrata.com
  */
 public abstract class ApiBase {
@@ -54,10 +54,9 @@ public abstract class ApiBase {
     protected HttpContext httpContext;
     protected HttpHost httpHost;
     protected ResourceBundle properties;
-    protected String              username, password;
+    protected String              username, password, appToken;
 
     protected List<BatchRequest> batchQueue;
-    
 
     /**
      * Default class constructor.
@@ -81,7 +80,7 @@ public abstract class ApiBase {
         // Store these because we need them for some specialized calls
         this.username = properties.getString("username");
         this.password = properties.getString("password");
-
+        this.appToken = properties.getString("app_token");
 
         batchQueue = new ArrayList<BatchRequest>();
 
@@ -102,7 +101,7 @@ public abstract class ApiBase {
      */
     public ApiBase(String username, String password) {
         loadProperties();
-        
+
         this.username = username;
         this.password = password;
 
@@ -122,7 +121,7 @@ public abstract class ApiBase {
         for( BatchRequest b : batchQueue ) {
             batches.add(b.data());
         }
-        
+
         JSONObject bodyObject = new JSONObject();
         try {
             bodyObject.put("requests", batches);
@@ -131,7 +130,7 @@ public abstract class ApiBase {
             log(Level.SEVERE, "Could not convert array of batch requests to JSON", ex);
             return false;
         }
-        
+
         HttpPost request = new HttpPost(httpBase() + "/batches");
         try {
             request.setEntity(new StringEntity(bodyObject.toString()));
@@ -160,10 +159,12 @@ public abstract class ApiBase {
      */
     protected JsonPayload performRequest(HttpRequestBase request) {
         HttpResponse response;
-         HttpEntity entity;
+        HttpEntity entity;
+
+        request.addHeader("X-App-Token", this.appToken);
         try {
             response = httpClient.execute(httpHost, request, httpContext);
-            
+
             if( response.getStatusLine().getStatusCode() != 200 ) {
                 log(java.util.logging.Level.SEVERE, "Got status " +
                         response.getStatusLine().getStatusCode() + ": " +
@@ -171,16 +172,13 @@ public abstract class ApiBase {
                         " while performing request on " + request.getURI(), null);
                 return null;
             }
-            
 
-            JsonPayload payload = new JsonPayload(response);
-
-            return payload;
+            return new JsonPayload(response);
         }
         catch (Exception ex) {
             log(Level.SEVERE, "Error caught trying to perform HTTP request", ex);
             return null;
-        } 
+        }
     }
 
     /**
@@ -202,7 +200,7 @@ public abstract class ApiBase {
 
         AuthCache authCache = new BasicAuthCache();
         BasicScheme basicAuth = new BasicScheme();
-        
+
         httpContext = new BasicHttpContext();
         httpContext.setAttribute(ClientContext.AUTH_CACHE, basicAuth);
 
