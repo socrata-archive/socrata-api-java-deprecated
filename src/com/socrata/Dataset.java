@@ -78,7 +78,7 @@ public class Dataset extends ApiBase {
             data.put("description", description);
 
             if ( tags != null && tags.length > 0 ) {
-                data.put("tags", tags.toString());
+                data.put("tags", tags);
             }
         }
         catch (JSONException ex) {
@@ -379,7 +379,7 @@ public class Dataset extends ApiBase {
     public boolean setPublic(Boolean isPublic) {
         String paramString = isPublic ? "public.read" : "private";
 
-        HttpGet request = new HttpGet(httpBase() +
+        HttpPut request = new HttpPut(httpBase() +
                 "/views/" + id() + "?method=setPermission&value=" + paramString);
 
         return !isErroneous(performRequest(request));
