@@ -65,6 +65,15 @@ public class Dataset extends ApiBase {
     }
 
     /**
+     * Uid of the dataset
+     * @param uid
+     */
+    public Dataset(String uid) {
+        super();
+        this.id = uid;
+    }
+
+    /**
      * Creates a new dataset on the server
      * @param title  the title of the dataset
      * @param description  the description of the dataset
@@ -235,12 +244,12 @@ public class Dataset extends ApiBase {
      * @param type  the data type; e.g. text, number, url
      * @param width  how many pixels wide the column should display
      * @param hidden  whether or not the column is hidden
-     * @return success or failure
+     * @return column properties or null if error
      */
-    public boolean addColumn(String name, String description, 
-            DataType type, Integer width, Boolean hidden) {
+    public JSONObject addColumn(String name, String description,
+            DataType type, Integer width, Boolean hidden, String rdfProperties) {
         if ( ! attached() ) {
-            return false;
+            return null;
         }
 
         log(Level.FINEST, "Creating column '" + name + "' of type '" +
@@ -258,6 +267,9 @@ public class Dataset extends ApiBase {
                 map.put("formatting_option", "rich");
                 columnJson.put("format", map);
             }
+            if (rdfProperties != null) {
+                columnJson.put("rdfProperties", rdfProperties);
+            }
         } catch (JSONException ex) {
             log(Level.SEVERE, "Could not create column JSON data for addColumn()", ex);
         }
@@ -270,31 +282,103 @@ public class Dataset extends ApiBase {
         } 
         catch (UnsupportedEncodingException ex) {
             log(Level.SEVERE, "Could not encode column data in Dataset.addColumn().", ex);
-            return false;
+            return null;
         }
 
-        return !isErroneous(performRequest(request));
+
+        JsonPayload response = performRequest(request);
+        if ( isErroneous(response) ) {
+            log(Level.SEVERE, "Error in column creation, see logs" , null);
+            return null;
+        }
+
+        if ( response.getObject() == null ) {
+            log(Level.SEVERE, "Received empty response from server on Dataset.addColumn().", null);
+            return null;
+        }
+
+        return response.getObject();
     }
 
 
-    public boolean addColumn(String name, String description, DataType type,
+    public JSONObject addColumn(String name, String description, DataType type,
             Integer width) {
-        return addColumn(name, description, type, width, false);
+        return addColumn(name, description, type, width, false, null);
     }
 
-    public boolean addColumn(String name, String description, DataType type) {
-        return addColumn(name, description, type, DEFAULT_COLUMN_WIDTH, false);
+    public JSONObject addColumn(String name, String description, DataType type) {
+        return addColumn(name, description, type, DEFAULT_COLUMN_WIDTH, false, null);
     }
 
-    public boolean addColumn(String name, String description) {
+    public JSONObject addColumn(String name, String description) {
         return addColumn(name, description, DEFAULT_COLUMN_TYPE,
-                DEFAULT_COLUMN_WIDTH, false);
+                DEFAULT_COLUMN_WIDTH, false, null);
     }
 
-    public boolean addColumn(String name) {
+    public JSONObject addColumn(String name) {
         return addColumn(name, "", DEFAULT_COLUMN_TYPE,
-                DEFAULT_COLUMN_WIDTH, false);
+                DEFAULT_COLUMN_WIDTH, false, null);
     }
+
+    /**
+     * Update an existing column name, description or rdfProperties.
+     * Pass in null for properties you would like to leave untouched.
+     * @param columnId
+     * @param name
+     * @param description
+     * @param rdfProperties
+     * @return updated column properties or null if error
+     */
+    public JSONObject updateColumn(int columnId, String name, String description, String rdfProperties) {
+        if ( ! attached() ) {
+            return null;
+        }
+
+        log(Level.FINEST, "Updating column " + Integer.toString(columnId));
+
+        JSONObject columnJson = new JSONObject();
+        try {
+            if (name != null) {
+                columnJson.put("name", name);
+            }
+
+            if (description !=  null) {
+                columnJson.put("description", description);
+            }
+
+            if (rdfProperties != null) {
+                columnJson.put("rdfProperties", rdfProperties);
+            }
+        } catch (JSONException ex) {
+            log(Level.SEVERE, "Could not create column JSON data for updateColumn()", ex);
+        }
+
+        HttpPut request = new HttpPut(httpBase() + "/views/" + id() +
+                "/columns/" + Integer.toString(columnId) + ".json");
+
+        try {
+            request.setEntity(new StringEntity(columnJson.toString()));
+        }
+        catch (UnsupportedEncodingException ex) {
+            log(Level.SEVERE, "Could not encode column data in Dataset.addColumn().", ex);
+            return null;
+        }
+
+
+        JsonPayload response = performRequest(request);
+        if ( isErroneous(response) ) {
+            log(Level.SEVERE, "Error in column update, see logs" , null);
+            return null;
+        }
+
+        if ( response.getObject() == null ) {
+            log(Level.SEVERE, "Received empty response from server on Dataset.updateColumn().", null);
+            return null;
+        }
+
+        return response.getObject();
+    }
+
 
     /**
      * Uploads a file to the api
@@ -472,6 +556,58 @@ public class Dataset extends ApiBase {
             String json = new JSONStringer()
                 .object()
                     .key( "description" ).value( description )
+                 .endObject().toString();
+            putRequest(json);
+        }
+        catch (JSONException ex) {
+            log(Level.WARNING, "Could not serialize description data to JSON", ex);
+        }
+    }
+
+    /**
+     * Sets the dataset's resource name
+     * @param the name part of the url of a dataset in the form http://domain/resource/resourceName.
+     */
+    public void setResourceName(String resourceName) {
+        try {
+            String json = new JSONStringer()
+                .object()
+                    .key( "resourceName" ).value( resourceName )
+                 .endObject().toString();
+            putRequest(json);
+        }
+        catch (JSONException ex) {
+            log(Level.WARNING, "Could not serialize description data to JSON", ex);
+        }
+    }
+
+    /**
+     * Sets the dataset's row class
+     * @param the rdf class of a dataset.
+     */
+    public void setRowClass(String rowClass) {
+        try {
+            String json = new JSONStringer()
+                .object()
+                    .key( "rowClass" ).value( rowClass )
+                 .endObject().toString();
+            putRequest(json);
+        }
+        catch (JSONException ex) {
+            log(Level.WARNING, "Could not serialize description data to JSON", ex);
+        }
+    }
+
+    /**
+     * Sets the dataset's row identifier column which enables individual row access by urls
+     * in the form - http://domain/resource/resourceName/rowIdentifierColumn-value.
+     * @param id of the row identifier column.
+     */
+    public void setRowIdentifierColumnId(Integer rowIdentifierColumnId) {
+        try {
+            String json = new JSONStringer()
+                .object()
+                    .key( "rowIdentifierColumnId" ).value( rowIdentifierColumnId )
                  .endObject().toString();
             putRequest(json);
         }
